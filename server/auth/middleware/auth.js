@@ -1,46 +1,33 @@
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
 import User from '../../models/user.js';
 
-dotenv.config();
+const requireAuth = async (req, res, next) => {
+  const token = req.headers.authorization && req.headers.authorization.split(' ')[1];
 
-const requireAuth = (req, res, next) => {
-  const token = req.headers.authorization;
-
-  if (token) {
-    // Verify the token using a dynamic secret
-    jwt.verify(token, createDynamicSecretFromUser, (err, decodedToken) => {
-      if (err) {
-        res.status(401).json({ message: 'Unauthorized' });
-      } else {
-        // Check if the user associated with the token exists
-        User.findById(decodedToken.id, (err, user) => {
-          if (err || !user) {
-            res.status(401).json({ message: 'Unauthorized' });
-          } else {
-            req.user = user;
-            next();
-          }
-        });
-      }
-    });
-  } else {
-    res.status(401).json({ message: 'Unauthorized' });
+  if (!token) {
+    return res.status(401).json({ message: 'Unauthorized: No token provided' });
   }
-};
 
-// Create a dynamic secret based on user-specific information
-const createDynamicSecretFromUser = (decodedToken, callback) => {
-  if (decodedToken && decodedToken.id) {
-    User.findById(decodedToken.id, (err, user) => {
-      if (err || !user) {
-        callback(err, null);
-      } else {
-        callback(null, user.password);
-      }
-    });
-  } else {
-    callback('Invalid token', null);
+  try {
+    const decodedToken = jwt.decode(token);
+
+    if (!decodedToken) {
+      return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    }
+
+    const user = await User.findById(decodedToken.id);
+
+    if (!user) {
+      return res.status(401).json({ message: 'Unauthorized: User not found' });
+    }
+
+    jwt.verify(token, user.password);
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    res.status(401).json({ message: 'Unauthorized: Error verifying token', error: error.message });
   }
 };
 

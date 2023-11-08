@@ -1,6 +1,6 @@
 import express from 'express';
 import { createBlogPost, getBlogPosts, getBlogPost, updateBlogPost, deleteBlogPost } from '../controllers/Post.js';
-import requireAuth from '../middleware/Post.js';
+import requireAuth from '../../auth/middleware/auth.js';
 
 const router = express.Router();
 

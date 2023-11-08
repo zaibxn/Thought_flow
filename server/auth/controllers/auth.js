@@ -1,20 +1,40 @@
-import User from '../../models/user.js';
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
+import User from '../../models/user.js';
 import bcrypt from 'bcrypt';
-import zxcvbn from 'zxcvbn';
-import cookie from 'cookie'; // Import the 'cookie' library
+import cookie from 'cookie';
 
-dotenv.config();
-
-const createDynamicSecret = (user) => {
-  return user.password; // You can adjust this based on your requirements
+const createToken = (id, secret) => {
+  return jwt.sign({ id }, secret, { expiresIn: '1h' });
 };
 
-const createToken = (id, user) => {
-  return jwt.sign({ id }, createDynamicSecret(user), {
-    expiresIn: '1h'
-  });
+const requireAuth = async (req, res, next) => {
+  const token = req.headers.authorization && req.headers.authorization.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Unauthorized: No token provided' });
+  }
+
+  try {
+    const decodedToken = jwt.decode(token);
+
+    if (!decodedToken) {
+      return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    }
+
+    const user = await User.findById(decodedToken.id);
+
+    if (!user) {
+      return res.status(401).json({ message: 'Unauthorized: User not found' });
+    }
+
+    jwt.verify(token, user.password);
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    res.status(401).json({ message: 'Unauthorized: Error verifying token', error: error.message });
+  }
 };
 
 const register = async (req, res) => {
@@ -26,7 +46,7 @@ const register = async (req, res) => {
     email,
     password,
     gender,
-    agreeToTwoGenders
+    agreeToTwoGenders,
   } = req.body;
 
   try {
@@ -50,7 +70,9 @@ const register = async (req, res) => {
     }
 
     if (password.includes(lowerCaseUsername) || password.includes(dob)) {
-      return res.status(400).json({ message: 'Password should not contain username or date of birth' });
+      return res
+        .status(400)
+        .json({ message: 'Password should not contain username or date of birth' });
     }
 
     const saltRounds = 10;
@@ -65,21 +87,24 @@ const register = async (req, res) => {
       email: lowerCaseEmail,
       password: hashedPassword,
       gender,
-      agreeToTwoGenders
+      agreeToTwoGenders,
     });
 
-    const token = createToken(user._id, user);
+    const token = createToken(user._id, hashedPassword);
 
-    // Set the JWT token as a cookie
-    res.setHeader('Set-Cookie', cookie.serialize('token', token, {
-      httpOnly: true,
-      sameSite: 'strict',
-      maxAge: 3600, // Token expiration time in seconds (1 hour)
-    }));
+    res.setHeader(
+      'Set-Cookie',
+      cookie.serialize('token', token, {
+        httpOnly: true,
+        sameSite: 'strict',
+        maxAge: 3600, // Token expiration time in seconds (1 hour)
+      })
+    );
 
     res.status(201).json({ user, token });
-  } catch (err) {
-    res.status(400).json(err.message);
+  } catch (error) {
+    console.error('Error during registration:', error);
+    res.status(400).json({ message: 'Registration failed', error: error.message });
   }
 };
 
@@ -97,25 +122,27 @@ const login = async (req, res) => {
     if (user) {
       const isMatch = await bcrypt.compare(password, user.password);
       if (isMatch) {
-        // Create a new token for the user
-        const newToken = createToken(user._id, user);
+        const token = createToken(user._id, user.password);
 
-        // Set the new JWT token as a cookie
-        res.setHeader('Set-Cookie', cookie.serialize('token', newToken, {
-          httpOnly: true,
-          sameSite: 'strict',
-          maxAge: 3600, // Token expiration time in seconds (1 hour)
-        }));
+        res.setHeader(
+          'Set-Cookie',
+          cookie.serialize('token', token, {
+            httpOnly: true,
+            sameSite: 'strict',
+            maxAge: 3600, // Token expiration time in seconds (1 hour)
+          })
+        );
 
-        res.status(200).json({ user, token: newToken });
+        res.status(200).json({ user, token });
       } else {
         res.status(401).json({ message: 'Invalid credentials' });
       }
     } else {
       res.status(401).json({ message: 'Invalid credentials' });
     }
-  } catch (err) {
-    res.status(400).json(err.message);
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(400).json({ message: 'Login failed', error: error.message });
   }
 };
 
@@ -130,8 +157,9 @@ const checkUsername = async (req, res) => {
     }
 
     return res.status(200).json({ exists: false });
-  } catch (err) {
-    res.status(400).json(err.message);
+  } catch (error) {
+    console.error('Error checking username:', error);
+    res.status(400).json({ message: 'Username check failed', error: error.message });
   }
 };
 
@@ -146,9 +174,10 @@ const checkEmail = async (req, res) => {
     }
 
     return res.status(200).json({ exists: false });
-  } catch (err) {
-    res.status(400).json(err.message);
+  } catch (error) {
+    console.error('Error checking email:', error);
+    res.status(400).json({ message: 'Email check failed', error: error.message });
   }
 };
 
-export { register, login, checkUsername, checkEmail };
+export { register, login, checkUsername, checkEmail, requireAuth };

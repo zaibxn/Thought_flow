@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../../context/authcontext"
+
 function CreatePost() {
   const { isLoggedIn, token } = useAuth();
   const [title, setTitle] = useState("");
@@ -12,7 +13,6 @@ function CreatePost() {
     e.preventDefault();
 
     if (!isLoggedIn) {
-      // You may want to handle cases where the user is not logged in
       console.error("User is not logged in");
       return;
     }
@@ -22,7 +22,7 @@ function CreatePost() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // Include the user's token
+          Authorization: `Bearer ${token}`, // Include a space after Bearer
         },
         body: JSON.stringify({
           title,
@@ -34,10 +34,8 @@ function CreatePost() {
       });
 
       if (response.ok) {
-        // Post created successfully, handle as needed (e.g., redirect)
         console.log("Post created successfully");
       } else {
-        // Handle errors, e.g., show an error message
         console.error("Error creating the blog post");
       }
     } catch (error) {
